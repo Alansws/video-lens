@@ -1,115 +1,69 @@
 # Video Lens
 
-`Video Lens` 是一个本地运行的视频分析 Web 应用，用来把“选视频 -> 调模型 -> 看结果”这条流程做成普通用户也能直接操作的工作台。
+`Video Lens` 是一个面向视频理解任务的本地 Web 应用。它提供统一的浏览器界面，用于提交单个视频或整文件夹批量任务，并在同一个工作台中展示处理进度、逐文件日志和结构化分析结果。
 
-它支持两条分析路径：
+项目当前支持两条分析链路：
 
 - `Ollama + qwen3-vl:8b`
-  适合本地离线、隐私优先、希望把模型放在自己电脑上运行的场景。
+  适合本地运行、隐私优先和离线可用场景。
 - `Gemini Video API`
-  适合希望直接上传视频文件到云端视频接口的场景。
+  适合直接将视频文件提交给云端视频理解接口的场景。
 
-用户可以分析单个视频，也可以一次选择整个文件夹，让系统顺序处理并保留每个视频的独立结果。
+与“单独写脚本调用模型”不同，这个项目把视频选择、任务调度、状态追踪和结果查看整合成了一个可直接使用的工具界面。
 
 ## 界面预览
 
 <img src="docs/assets/video-lens-ui.png" alt="Video Lens UI screenshot" width="100%" />
 
-## 功能特性
+## 核心能力
 
 - 单视频分析
 - 整文件夹批量分析
-- 实时任务状态与日志
+- 实时任务状态与处理日志
 - 队列视图与单条结果详情
 - 本地 `Ollama` 路线
 - 云端 `Gemini` 路线
-- 中文结构化结果输出
+- 中文结构化输出
 
-## 适合谁使用
+## 适用场景
 
-- 想用 AI 分析本地视频，但代码基础有限的人
-- 想批量处理一个文件夹视频的人
-- 想对比本地模型与云端视频接口的人
-- 想把视频理解能力包装成一个可操作工具，而不是命令行脚本的人
+- 对单个视频做画面级分析与总结
+- 批量处理一组本地视频文件
+- 对比本地模型与云端视频接口的结果差异
+- 将“视频理解能力”包装成可操作的产品原型或内部工具
 
-## 运行原理
-
-从用户视角，你直接选择视频文件即可。
-
-从系统实现视角，有两条不同路线：
+## 工作方式
 
 ### Ollama 路线
 
-1. 读取视频元数据
-2. 自动抽取关键帧
-3. 把关键帧按顺序发送给本地视觉模型
-4. 返回中文分析结果
-
-这条路线适合本地部署和隐私优先场景。
+`Video Lens` 会先读取视频元数据，再自动抽取关键帧，并把这些帧按时间顺序提交给本地视觉模型。用户看到的是“直接上传视频”，但关键帧提取这一步由应用在内部自动完成。
 
 ### Gemini 路线
 
-1. 直接上传视频文件到 Gemini Files API
-2. 等待服务端处理完成
-3. 调用视频理解接口生成结果
+应用会直接把视频文件上传到 Gemini Files API，等待服务端完成处理后，再调用视频理解接口返回结果。
 
-这条路线适合希望直接上传视频、减少本地模型配置的人。
+## 运行要求
 
-## 运行前需要准备什么
-
-### 1. Python
-
-后端使用 Python 标准库实现，不依赖额外第三方 Python 包。
-
-推荐版本：
+### 基础环境
 
 - `Python 3.11+`
+- `ffmpeg`
+- `ffprobe`
 
 检查命令：
 
 ```bash
 python3 --version
-```
-
-### 2. ffmpeg / ffprobe
-
-用于读取视频元数据和抽取关键帧。
-
-检查命令：
-
-```bash
 ffmpeg -version
 ffprobe -version
 ```
 
-安装方式：
+### Ollama 路线额外要求
 
-- macOS：
+- 已安装并启动 `Ollama`
+- 已拉取 `qwen3-vl:8b`
 
-```bash
-brew install ffmpeg
-```
-
-- Windows：
-
-```powershell
-winget install Gyan.FFmpeg
-```
-
-- Ubuntu / Debian：
-
-```bash
-sudo apt update
-sudo apt install ffmpeg
-```
-
-### 3. Ollama（如果你要使用本地模型）
-
-下载地址：
-
-- [https://ollama.com/download](https://ollama.com/download)
-
-安装后确认服务可用：
+检查服务：
 
 ```bash
 ollama list
@@ -121,26 +75,15 @@ ollama list
 curl http://127.0.0.1:11434/api/tags
 ```
 
-### 4. 拉取默认本地模型
-
-本项目默认使用：
-
-- `qwen3-vl:8b`
-
-拉取命令：
+拉取模型：
 
 ```bash
 ollama pull qwen3-vl:8b
 ```
 
-### 5. Gemini API Key（可选）
+### Gemini 路线额外要求
 
-如果你只用 `Ollama`，这一项可以跳过。
-
-如果你想使用 `Gemini` 路线，需要准备一个 Gemini API Key，然后在网页表单中填写：
-
-- `Gemini API Key`
-- `Gemini 模型名`
+- 有可用的 Gemini API Key
 
 默认模型名：
 
@@ -155,13 +98,13 @@ git clone https://github.com/Alansws/video-lens.git
 cd video-lens
 ```
 
-### 2. 启动项目
+### 2. 启动应用
 
 ```bash
 python3 app.py
 ```
 
-成功后会看到：
+启动成功后会输出：
 
 ```text
 Video Lens running at http://127.0.0.1:8765
@@ -175,47 +118,42 @@ Video Lens running at http://127.0.0.1:8765
 http://127.0.0.1:8765
 ```
 
-### 4. 开始使用
+### 4. 提交任务
 
-#### 单视频分析
+#### 单视频
 
-1. 选择 `单个视频`
+1. 选择 `单视频精查`
 2. 选择 `Ollama` 或 `Gemini`
 3. 选择一个视频文件
-4. 可选填写附加要求
+4. 可选填写补充分析要求
 5. 点击 `开始分析`
 
-#### 批量分析整个文件夹
+#### 文件夹批量
 
-1. 选择 `整个文件夹`
+1. 选择 `文件夹批量`
 2. 选择 `Ollama` 或 `Gemini`
-3. 选择一个包含多个视频的文件夹
-4. 可选填写附加要求
+3. 选择一个包含多个视频的目录
+4. 可选填写补充分析要求
 5. 点击 `开始批量分析`
 
-系统会自动：
-
-- 识别其中的视频文件
-- 按顺序处理
-- 为每个视频保留独立结果
-- 在队列中展示状态和日志
+批量模式下，系统会按顺序处理目录中的视频文件，并为每个文件保留独立结果。
 
 ## 配置项
 
-项目支持通过环境变量调整默认行为：
+应用支持通过环境变量调整默认行为：
 
 | 变量名 | 默认值 | 说明 |
 | --- | --- | --- |
-| `APP_HOST` | `127.0.0.1` | 本地服务监听地址 |
-| `APP_PORT` | `8765` | 本地服务端口 |
+| `APP_HOST` | `127.0.0.1` | 服务监听地址 |
+| `APP_PORT` | `8765` | 服务端口 |
 | `OLLAMA_API_BASE` | `http://127.0.0.1:11434/api` | Ollama API 地址 |
-| `OLLAMA_MODEL` | `qwen3-vl:8b` | 本地默认模型 |
+| `OLLAMA_MODEL` | `qwen3-vl:8b` | 默认本地模型 |
 | `DEFAULT_OLLAMA_FPS` | `1` | Ollama 路线默认抽帧 FPS |
 | `DEFAULT_OLLAMA_MAX_FRAMES` | `24` | Ollama 路线默认最大帧数 |
-| `DEFAULT_GEMINI_MODEL` | `gemini-2.5-pro` | Gemini 默认模型 |
-| `MAX_UPLOAD_MB` | `512` | 单次请求最大上传体积 |
+| `DEFAULT_GEMINI_MODEL` | `gemini-2.5-pro` | 默认 Gemini 模型 |
+| `MAX_UPLOAD_MB` | `512` | 单次上传大小上限 |
 
-例如：
+示例：
 
 ```bash
 APP_PORT=9000 OLLAMA_MODEL=qwen3-vl:8b python3 app.py
@@ -232,20 +170,20 @@ APP_PORT=9000 OLLAMA_MODEL=qwen3-vl:8b python3 app.py
 ```
 
 ```text
-请帮我判断视频是否存在明显的广告感、摆拍感或场景不一致问题。
+请判断视频是否存在明显的广告感、摆拍感或场景不一致问题。
 ```
 
 ## 常见问题
 
 ### 页面显示 Ollama 未就绪
 
-先检查：
+先检查 `Ollama` 服务是否在运行：
 
 ```bash
 ollama list
 ```
 
-如果没有返回模型列表，说明 `Ollama` 服务没有正常运行。
+如果服务未启动，先启动 `Ollama` 应用或本地服务。
 
 ### 找不到 `qwen3-vl:8b`
 
@@ -257,15 +195,15 @@ ollama pull qwen3-vl:8b
 
 ### 找不到 `ffmpeg` / `ffprobe`
 
-说明系统没有安装视频工具，按前文安装即可。
+说明系统未安装视频处理工具，请先完成安装。
 
 ### 批量分析为什么比较慢
 
-当前版本采用顺序处理，以稳定性、可追踪日志和单视频结果可定位性为优先。
+当前版本采用顺序处理。这样做的目标是优先保证稳定性、日志可追踪性和单视频结果可定位性，而不是追求最高并发吞吐。
 
-### 为什么文件夹上传在某些浏览器不可用
+### 为什么文件夹上传在某些浏览器中不可用
 
-文件夹批量选择依赖浏览器对目录上传的支持。建议优先使用较新的 Chromium 系浏览器。
+目录上传依赖浏览器实现，建议优先使用较新的 Chromium 系浏览器。
 
 ## 项目结构
 
@@ -276,7 +214,9 @@ ollama pull qwen3-vl:8b
 ├── CONTRIBUTING.md
 ├── LICENSE
 ├── docs
-│   └── TECH_STACK.md
+│   ├── TECH_STACK.md
+│   └── assets
+│       └── video-lens-ui.png
 └── static
     ├── app.js
     ├── index.html
@@ -285,21 +225,27 @@ ollama pull qwen3-vl:8b
 
 ## 文档
 
-- 技术栈与设计思路：[docs/TECH_STACK.md](docs/TECH_STACK.md)
-- 协作说明：[CONTRIBUTING.md](CONTRIBUTING.md)
+- 技术栈与设计说明：[docs/TECH_STACK.md](docs/TECH_STACK.md)
+- 贡献说明：[CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## 开发检查
 
-项目当前最基本的本地检查方式：
+最基础的本地检查方式：
 
 ```bash
 python3 -m py_compile app.py
 node --check static/app.js
 ```
 
+如果修改了任务提交流程、provider 逻辑或批量处理逻辑，建议再手动验证一次：
+
+- 单视频分析
+- 文件夹批量分析
+- 对应 provider 的真实返回结果
+
 ## 贡献
 
-欢迎 issue 和 PR。开始前建议先看：
+欢迎 issue 和 PR。提交前建议先阅读：
 
 - [CONTRIBUTING.md](CONTRIBUTING.md)
 
