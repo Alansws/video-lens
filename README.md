@@ -11,6 +11,10 @@
 
 用户可以分析单个视频，也可以一次选择整个文件夹，让系统顺序处理并保留每个视频的独立结果。
 
+## 界面预览
+
+<img src="docs/assets/video-lens-ui.png" alt="Video Lens UI screenshot" width="100%" />
+
 ## 功能特性
 
 - 单视频分析
