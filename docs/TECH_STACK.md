@@ -1,409 +1,314 @@
-# Video Lens 技术栈文档
+# Technical Stack
 
-## 1. 项目目标
+## Overview
 
-`Video Lens` 的核心目标不是“做一个模型实验脚本”，而是“做一个普通人也能直接操作的视频分析工具”。
+`Video Lens` is a local-first video analysis application with a browser UI and two interchangeable inference paths:
 
-这个目标直接决定了技术选型：
+- a local path built around `Ollama + qwen3-vl:8b`
+- a cloud path built around the `Gemini Files API`
 
-- 要足够轻，部署简单
-- 要能本地运行，不强迫用户上云
-- 要支持视频文件输入，而不是只接受文本
-- 要把视频分析流程做成可视化界面
-- 要兼顾单视频和批量文件夹处理
+The project is intentionally lightweight. It is designed to be easy to run on a single machine, easy to inspect, and easy to extend without introducing unnecessary framework complexity.
 
-## 2. 总体架构
+This document explains:
 
-项目采用非常直接的三层结构：
+- which technologies the project uses
+- why those technologies were selected
+- how the main runtime flows work
+- which tradeoffs were accepted in the current architecture
 
-1. 前端展示层
-2. Python 后端服务层
-3. 模型与视频处理层
+## System Architecture
 
-整体流程如下：
+At a high level, the application has four layers:
+
+1. Browser UI
+2. Local HTTP server
+3. Video processing pipeline
+4. Model provider integrations
+
+The end-to-end request flow is:
 
 ```text
-用户选择视频/文件夹
-        ↓
-浏览器把文件上传到本地 Python 服务
-        ↓
-Python 解析任务参数并创建 job
-        ↓
-根据 provider 进入不同处理路径
-        ↓
-Ollama 路线：ffprobe/ffmpeg → 抽帧 → 调用 Ollama
-Gemini 路线：直接上传视频文件 → 调用 Gemini Files API
-        ↓
-后端保存每个视频的进度、日志、结果
-        ↓
-前端轮询 job 状态并渲染队列和结果
+Browser UI
+  -> uploads one or more video files
+  -> local Python server creates a job
+  -> server chooses provider-specific pipeline
+  -> video is either frame-sampled locally or uploaded directly
+  -> provider returns analysis text
+  -> server stores per-item status/result
+  -> browser polls job state and renders queue/detail views
 ```
 
-## 3. 技术栈总览
+## Stack Summary
 
-### 后端
+### Application server
 
-- `Python`
+- `Python 3`
 - `http.server`
 - `threading`
 - `subprocess`
 - `urllib.request`
 
-### 前端
+### Frontend
 
 - `HTML`
 - `CSS`
 - `Vanilla JavaScript`
 
-### 视频处理
+### Video tooling
 
-- `ffmpeg`
 - `ffprobe`
+- `ffmpeg`
 
-### 模型接入
+### Model integrations
 
-- `Ollama API`
-- `Gemini Files API`
+- `Ollama HTTP API`
+- `Google Gemini Files API`
 
-## 4. 为什么后端选 Python
+## Why Python Standard Library
 
-Python 的优势在这个项目里非常明确：
+The backend is implemented with Python standard library components instead of a larger web framework.
 
-- 调用系统命令非常方便
-- 处理文件上传、JSON、线程这些任务足够直接
-- 非常适合把 `ffmpeg`、`ffprobe`、本地模型 API 串起来
-- 对于这种中小型工具，开发速度快，维护成本低
+That decision is deliberate.
 
-我们没有使用更重的后端框架，比如 `Django` 或 `FastAPI`，原因不是它们不好，而是这个项目暂时不需要它们。
+The current server responsibilities are:
 
-本项目当前需求是：
+- serve static frontend files
+- accept multipart video uploads
+- maintain in-memory job state
+- invoke local tools such as `ffmpeg` and `ffprobe`
+- call external HTTP APIs
 
-- 启动一个本地服务
-- 接收文件上传
-- 维护任务状态
-- 调用本地或云端模型
+For this scope, Python standard library is sufficient and has several advantages:
 
-这些事情用 Python 标准库已经足够完成。
+- minimal dependency surface
+- easier setup for users cloning the repository
+- simpler operational model
+- low cognitive load for contributors
+- direct integration with local CLI tooling
 
-这样做的好处是：
+Frameworks such as `FastAPI` or `Django` would make sense only if the project grows into a larger multi-user service with authentication, persistent storage, richer API contracts, or background worker infrastructure.
 
-- 依赖更少
-- 克隆后更容易跑起来
-- 对初学者更友好
-- 整个项目更容易读懂
+## Why Vanilla Frontend
 
-## 5. 为什么前端选原生 HTML / CSS / JS
+The frontend uses plain `HTML`, `CSS`, and `JavaScript` rather than React, Vue, or another SPA framework.
 
-这个项目的前端不是复杂的业务后台，也不是大型 SPA。
+That choice keeps the application aligned with its current product shape:
 
-它本质上是一个单页工具面板，前端主要负责：
+- one browser page
+- limited navigation complexity
+- mostly form submission, queue rendering, and polling
+- no client-side routing
+- no shared state that justifies a component framework
 
-- 表单输入
-- 任务提交
-- 状态轮询
-- 队列渲染
-- 结果展示
+Advantages of this approach:
 
-因此使用原生前端的优势很明显：
+- no frontend build step is required to run the project
+- contributors can inspect the UI directly from source files
+- fewer toolchain failures
+- lower maintenance cost
+- easier onboarding for small-project contributors
 
-- 不需要 Node 打包环境
-- 不需要 React / Vue 构建链
-- 减少安装和版本问题
-- 部署简单，后端直接静态托管即可
+The cost of this decision is that complex UI refactors are less structured than they would be in a component system. For the current scope, that tradeoff is acceptable.
 
-这也是为什么项目对“只有少量代码基础的人”更友好。
+## Why ffmpeg and ffprobe
 
-他不需要先理解：
+Video analysis requires two low-level capabilities before a model can be called reliably:
 
-- bundler
-- npm scripts
-- Vite
-- component state 管理
-- 构建产物
+- extract metadata such as duration, codec, dimensions, and stream structure
+- derive ordered visual samples from the original video when using a local VLM path
 
-直接打开源码就能理解页面结构、样式和交互。
+`ffprobe` is used for metadata inspection.
 
-## 6. 为什么要用 ffmpeg / ffprobe
+`ffmpeg` is used for frame extraction.
 
-视频分析不是单纯把文件交给模型就结束了。
+These tools were selected because they are:
 
-后端首先需要知道：
+- cross-platform
+- stable
+- widely adopted
+- format-flexible
+- well suited to automation
 
-- 视频时长
-- 分辨率
-- 编码信息
-- 是否包含音频
+For a local video workflow, there is no practical alternative with a better stability-to-complexity ratio.
 
-这部分信息由 `ffprobe` 获取。
+## Provider Design
 
-如果走本地 `Ollama` 路线，还需要把视频转成视觉模型更容易处理的输入形式，也就是关键帧序列。
+The project supports two provider families, but the scheduling model is unified.
 
-这部分由 `ffmpeg` 完成。
+### Ollama path
 
-选择 `ffmpeg` / `ffprobe` 的原因：
+The Ollama integration is designed for local inference.
 
-- 业界事实标准
-- 稳定
-- 跨平台
-- 几乎所有视频格式都能处理
-- 非常适合自动化管道
+Processing steps:
 
-## 7. 为什么接入 Ollama
+1. inspect the uploaded video with `ffprobe`
+2. compute effective frame sampling parameters
+3. extract frames with `ffmpeg`
+4. encode frames as base64 image payloads
+5. submit them to `Ollama /api/generate`
+6. store structured result data and per-item timings
 
-`Ollama` 的价值在于把本地模型运行这件事变简单。
+This path exists because current Ollama vision interfaces are image-oriented at the API layer. The application hides that complexity from the end user.
 
-对于本项目来说，它的优势包括：
+### Gemini path
 
-- 用户可以在自己电脑上跑模型
-- 本地隐私更好
-- 提供统一的本地 HTTP API
-- 用户不需要手写复杂推理脚本
-- 模型切换成本较低
+The Gemini integration is designed for direct video submission.
 
-我们当前默认使用：
+Processing steps:
 
-- `qwen3-vl:8b`
+1. upload the video file to the Gemini Files API
+2. poll until the file becomes ready
+3. call `generateContent`
+4. collect and normalize the returned text
+5. delete the remote temporary file when possible
 
-原因是它处在一个比较实用的平衡点：
+This path exists because some users want a direct video API experience without local model runtime requirements.
 
-- 有真实视觉理解能力
-- 本地部署可行
-- 质量和资源占用之间比较平衡
+## Job Model
 
-## 8. 为什么还要接入 Gemini
+One of the key architectural decisions in the project is the unified job model.
 
-虽然本地模型很重要，但很多用户会问两个问题：
+The backend treats:
 
-1. 有没有“直接上传视频文件”的方案？
-2. 有没有不需要在本地自己处理帧的方案？
+- a single-video task
+- a folder batch task
 
-所以项目保留了 `Gemini` 路线。
+as the same abstraction: a `job` containing one or more `items`.
 
-这样做有两个价值：
+Benefits of this approach:
 
-- 产品层面给用户一个“直接传视频”的选择
-- 技术层面让项目同时覆盖本地方案和云端方案
+- single polling contract for the frontend
+- uniform progress accounting
+- simpler queue rendering
+- easier extension to additional providers
+- cleaner failure handling at per-item granularity
 
-因此项目不是只押注一种路线，而是把现实里最常见的两种能力都接起来：
+This is more maintainable than building separate code paths for “single mode” and “batch mode”.
 
-- 本地可控
-- 云端直接
+## State Management Strategy
 
-## 9. 为什么批量分析采用顺序处理
+The server keeps job state in memory.
 
-文件夹批量分析是本项目的重要功能。
+This means the current architecture is optimized for:
 
-但批量并不等于一开始就要并发。
+- local use
+- single-process runtime
+- short-lived analysis sessions
+- minimal setup cost
 
-我们当前采用顺序处理，原因很现实：
+It is not designed for:
 
-- 本地模型本来就吃资源
-- 顺序执行更稳定
-- 更容易定位失败的视频
-- 日志更清晰
-- 用户更容易理解当前系统在处理哪一个文件
+- multi-user persistence
+- long-term historical job storage
+- distributed execution
+- restart-safe recovery
 
-对于工具型产品，稳定性通常比“理论最高吞吐”更重要。
+This is an intentional constraint, not an oversight. Persistence can be added later if the product grows into a longer-lived service.
 
-后续如果要优化吞吐，可以再考虑：
+## Why Polling Instead of WebSockets
 
-- 有限并发
-- 可配置 worker 数
-- 失败重试
+The browser currently polls job status rather than maintaining a persistent realtime connection.
 
-但第一版先把“稳定、清楚、好用”做好。
+That decision reduces implementation complexity and works well for the current workload because:
 
-## 10. 后端开发思路
+- jobs are relatively long-running
+- UI update frequency does not need sub-second precision
+- the app is single-user and local by default
+- the server should remain simple
 
-### 第一步：先统一任务模型
+WebSockets would be a reasonable upgrade only if the application later needs:
 
-不管是单视频还是文件夹批量，后端都需要一个统一的任务对象。
+- more frequent state updates
+- concurrent users
+- push-based notifications
+- richer live operational dashboards
 
-因此后端设计了 `Job` 概念：
+## Performance and Execution Tradeoffs
 
-- `job_id`
-- 当前状态
-- 日志
-- items 列表
-- 最终结果
-- 错误信息
+Batch analysis is intentionally sequential.
 
-这样前端轮询时就不需要区分太多情况。
+Reasons:
 
-### 第二步：把单视频和批量视频统一成 items
+- local VLM inference is resource-intensive
+- sequential execution gives clearer logs
+- per-item failure diagnosis is simpler
+- system load is more predictable on end-user hardware
 
-单视频其实可以看作“只有一个 item 的批量任务”。
+This sacrifices throughput in exchange for:
 
-这样带来的好处是：
+- stability
+- easier debugging
+- easier user comprehension
 
-- 后端逻辑统一
-- 前端队列统一
-- 状态统计统一
+Parallel execution can be added later, but it should be introduced as a controlled concurrency model rather than as an ad hoc optimization.
 
-这是一个很关键的简化点。
+## Security and Exposure Model
 
-### 第三步：把 provider 差异收口在 pipeline 层
+The application is built for local execution and defaults to:
 
-真正不同的不是任务系统，而是分析管道：
+- `127.0.0.1` binding
+- local Ollama API access
+- user-supplied Gemini API keys at runtime
 
-- `run_ollama_pipeline`
-- `run_gemini_pipeline`
+This is an acceptable baseline for a local tool, but it also implies clear boundaries:
 
-这样做的优势是：
+- the server is not production-hardened as an internet-facing service
+- the app assumes a trusted local environment
+- provider credentials and network exposure should be handled carefully before any remote deployment
 
-- 任务调度层保持稳定
-- 将来新增 provider 会更容易
-- 更方便排查某一条模型链路的问题
+If the project is later deployed beyond localhost, additional work would be required around:
 
-### 第四步：让前端只做展示，不做复杂业务判断
+- authentication
+- secrets management
+- upload validation
+- rate limiting
+- persistent job storage
 
-前端只负责：
+## Current Strengths
 
-- 提交任务
-- 轮询 job
-- 渲染状态
-- 渲染结果
+From an engineering perspective, the current stack is strong in the following areas:
 
-业务事实全部以后端 job 数据为准。
+- low setup friction
+- easy local reproducibility
+- straightforward source inspection
+- clean separation between scheduling and provider-specific execution
+- practical support for both local and cloud video analysis paths
 
-这能避免前端和后端各自维护一套复杂状态机。
+## Current Limits
 
-## 11. 前端开发思路
+The stack also has explicit limits:
 
-### 设计目标
+- no durable storage
+- no background worker process model
+- no authentication or multi-user isolation
+- no resumable local job persistence
+- no frontend component system for large-scale UI evolution
 
-不是做一个普通表单页，而是做一个“审片工作台”。
+These are acceptable for the current product stage, but they define the boundary of what this architecture should be expected to handle.
 
-所以前端结构上拆成了几个清晰区域：
+## Reasonable Next Steps
 
-- Hero 头部：说明产品定位
-- Control Deck：配置任务
-- Mission Control：看实时进度
-- Contact Sheet：看批量队列
-- Inspector：看当前视频详情
+If the project continues to grow, the most credible next improvements would be:
 
-### 为什么这样拆
+- `SQLite` or `PostgreSQL` for persisted job records
+- a dedicated task queue for long-running processing
+- WebSocket-based progress updates
+- export formats such as Markdown or JSON
+- stronger validation around uploads and provider configuration
+- optional API framework migration if endpoint complexity grows substantially
 
-因为视频分析和普通聊天框不同，它天然更适合“工作台”式布局。
+Those upgrades should be driven by actual product requirements, not by framework preference.
 
-用户通常需要同时关注：
+## Summary
 
-- 现在在跑什么
-- 一共有多少视频
-- 哪些完成了
-- 哪条失败了
-- 当前看的是哪一条结果
+The technical stack behind `Video Lens` is intentionally conservative.
 
-所以单栏布局不适合这个产品。
+It prioritizes:
 
-### 为什么强调队列 + 详情
+- operational simplicity
+- local usability
+- small dependency surface
+- direct access to practical video tooling
+- a clear path for incremental extension
 
-批量分析里，用户最常见的操作不是“只看总结果”，而是：
-
-- 先扫一眼全体状态
-- 再点进某一条视频看详情
-
-因此我们采用：
-
-- 左边列表
-- 右边详情
-
-这比把所有结果直接堆在一页里更实用。
-
-## 12. 本地视频分析路线的开发思路
-
-### Ollama 路线
-
-流程是：
-
-1. 接收视频文件
-2. `ffprobe` 读取元数据
-3. 根据时长、目标 FPS、最大帧数计算抽帧频率
-4. `ffmpeg` 抽取关键帧
-5. 把帧转成 base64 图片数组
-6. 调用 `Ollama /api/generate`
-7. 保存结果并回传前端
-
-这样设计的原因是：
-
-- 对用户来说仍然是“直接选视频”
-- 对模型来说仍然是“按视觉帧理解”
-- 对工程实现来说最稳定
-
-### Gemini 路线
-
-流程是：
-
-1. 接收视频文件
-2. 上传到 Gemini Files API
-3. 轮询直到文件可用
-4. 调用 `generateContent`
-5. 返回结果
-6. 尝试删除临时远程文件
-
-这样设计的优点是：
-
-- 用户视角真的是直接传视频
-- 项目同时具备本地与云端两种产品能力
-
-## 13. 当前技术栈的优势
-
-### 对用户
-
-- 更容易运行
-- 不需要理解太多工程概念
-- 本地和云端两种方案都能选
-- 可以直接分析单个视频或整个文件夹
-
-### 对开发者
-
-- 依赖少
-- 架构简单
-- 代码容易读
-- 易于扩展 provider
-- 易于定位问题
-
-### 对项目演进
-
-- 可以继续加导出功能
-- 可以继续加更多模型
-- 可以继续加并发队列
-- 可以继续加数据库和历史任务
-
-## 14. 当前技术栈的取舍
-
-这套技术栈不是“最现代的堆料组合”，而是“当前阶段最务实的组合”。
-
-我们明确做了这些取舍：
-
-- 不上 React / Vue，换来更低环境门槛
-- 不上 FastAPI，换来更少依赖和更简单启动
-- 不先做数据库，换来更快实现和更低复杂度
-- 不先做并发队列，换来更稳定的批量执行
-
-这不是能力问题，而是产品阶段选择。
-
-## 15. 将来可扩展的方向
-
-如果项目继续发展，下一步技术演进可以考虑：
-
-- `FastAPI`：更适合更复杂的 API 结构
-- `SQLite / PostgreSQL`：保存历史任务和结果
-- `WebSocket`：替代轮询，做更实时的状态更新
-- 并发任务调度器：提升批量吞吐
-- 结果导出：Markdown、JSON、CSV
-- 用户配置文件：保存默认 provider、prompt、参数
-
-## 16. 总结
-
-`Video Lens` 的技术栈不是为了炫技，而是为了完成一个清晰目标：
-
-把“视频分析”这件事，做成一个真实能用、普通用户也能跑通的本地工具。
-
-所以这套栈的核心优势不是“前沿”，而是：
-
-- 清楚
-- 够用
-- 易跑
-- 易扩展
-- 符合这个项目的实际阶段
+For the current scope of the project, that is the correct tradeoff.
