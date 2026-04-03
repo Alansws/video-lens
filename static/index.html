@@ -1,255 +1,182 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Video Lens</title>
-    <link rel="stylesheet" href="/static/styles.css">
-  </head>
-  <body>
-    <div class="noise"></div>
-    <div class="ambient ambient-a"></div>
-    <div class="ambient ambient-b"></div>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Video Lens | 视频分析工作台</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- 左侧控制台 -->
+    <aside class="sidebar">
+      <div class="brand">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+        <h1>Video Lens</h1>
+      </div>
+      
+      <form id="analyze-form" class="controls">
+        <!-- 运行环境状态 -->
+        <div class="status-banner" id="provider-summary">
+          <div class="pulse-dot"></div>
+          <span>检查运行环境...</span>
+        </div>
 
-    <main class="app-shell">
-      <header class="hero panel">
-        <div class="hero-copy">
-          <p class="eyebrow">Video Intelligence Atelier</p>
-          <h1>Video Lens</h1>
-          <p class="lead">
-            面向本地视频分析的审片工作台。你可以只看一条视频，也可以一次导入整个文件夹，让系统按顺序跑完并把每条结果拆开给你检查。
-          </p>
+        <input id="scope" name="scope" type="hidden" value="single">
+        <input id="provider" name="provider" type="hidden" value="ollama">
 
-          <div class="hero-stats">
-            <article class="hero-stat">
-              <span class="hero-stat-label">Single Pass</span>
-              <strong>单视频精查</strong>
-              <p>适合 Prompt 微调、细节比对和结果复核。</p>
-            </article>
-            <article class="hero-stat">
-              <span class="hero-stat-label">Folder Sweep</span>
-              <strong>整文件夹批量分析</strong>
-              <p>自动筛选视频文件，逐个进入队列并保留单条结果。</p>
-            </article>
-            <article class="hero-stat">
-              <span class="hero-stat-label">Dual Route</span>
-              <strong>本地或直传</strong>
-              <p>同一界面里切换本地 Ollama 路线和 Gemini 路线。</p>
-            </article>
+        <!-- 输入范围 -->
+        <div class="control-group">
+          <label class="group-label">任务模式</label>
+          <div class="segmented" id="scope-switch">
+            <button type="button" class="segment active" data-scope="single">单视频精查</button>
+            <button type="button" class="segment" data-scope="folder">文件夹批量</button>
           </div>
         </div>
 
-        <aside class="hero-aside">
-          <div class="hero-note">
-            <span class="mini-label">Working Modes</span>
-            <div class="hero-note-row">
-              <strong>Local</strong>
-              <p>Ollama + <code>qwen3-vl:8b</code></p>
-            </div>
-            <div class="hero-note-row">
-              <strong>Direct</strong>
-              <p>Gemini Video API</p>
-            </div>
+        <!-- 引擎选择 -->
+        <div class="control-group">
+          <label class="group-label">推理引擎</label>
+          <div class="grid-2" id="provider-grid">
+            <button type="button" class="engine-card active" data-provider="ollama">
+              <span class="badge badge-local">LOCAL</span>
+              <strong>Ollama</strong>
+            </button>
+            <button type="button" class="engine-card" data-provider="gemini">
+              <span class="badge badge-cloud">CLOUD</span>
+              <strong>Gemini</strong>
+            </button>
           </div>
+        </div>
 
-          <div class="hero-note hero-note-accent">
-            <span class="mini-label">Output Style</span>
-            <p>结果区按“队列 / 单条详情”拆开，方便批量浏览时快速定位异常视频。</p>
-          </div>
-        </aside>
-      </header>
-
-      <section class="studio-grid">
-        <form id="analyze-form" class="panel command-deck">
-          <div class="panel-head">
-            <div>
-              <p class="panel-kicker">Control Deck</p>
-              <h2>任务配置</h2>
-            </div>
-            <p id="provider-summary" class="panel-note">正在读取运行环境…</p>
-          </div>
-
-          <input id="scope" name="scope" type="hidden" value="single">
-          <input id="provider" name="provider" type="hidden" value="ollama">
-
-          <section class="section-block">
-            <div class="section-title-row">
-              <span class="section-label">输入范围</span>
-              <span class="section-note">在单条细看和整批扫描之间切换</span>
-            </div>
-            <div class="segmented" id="scope-switch">
-              <button type="button" class="segment active" data-scope="single">单个视频</button>
-              <button type="button" class="segment" data-scope="folder">整个文件夹</button>
-            </div>
-          </section>
-
-          <section class="section-block">
-            <div class="section-title-row">
-              <span class="section-label">分析后端</span>
-              <span class="section-note">统一入口，两条执行路线</span>
-            </div>
-            <div class="provider-grid" id="provider-grid">
-              <button type="button" class="provider-card active" data-provider="ollama">
-                <span class="provider-badge">LOCAL</span>
-                <strong>Ollama</strong>
-                <p>本地优先，适合离线和隐私场景。</p>
-              </button>
-              <button type="button" class="provider-card" data-provider="gemini">
-                <span class="provider-badge">DIRECT</span>
-                <strong>Gemini</strong>
-                <p>直接上传视频文件，交给官方视频接口处理。</p>
-              </button>
-            </div>
-          </section>
-
-          <section class="section-block">
-            <div class="section-title-row">
-              <span class="section-label">素材导入</span>
-              <span id="selection-mode-note" class="section-note">当前为单视频模式</span>
-            </div>
-
-            <div id="single-drop" class="drop-zone">
-              <label class="drop-label">
-                <input id="single-video-input" name="video" type="file" accept="video/*" hidden>
-                <span class="drop-eyebrow">Single Intake</span>
-                <strong>挑一条视频做精查</strong>
-                <em>适合分析一条素材的动作、画面变化、场景信息和不确定点。</em>
-              </label>
-            </div>
-
-            <div id="folder-drop" class="drop-zone hidden">
-              <label class="drop-label">
-                <input id="folder-video-input" name="videos" type="file" multiple webkitdirectory directory hidden>
-                <span class="drop-eyebrow">Folder Intake</span>
-                <strong>选择整个文件夹</strong>
-                <em>会自动遍历所选目录中的视频文件，按顺序进入队列处理。</em>
-              </label>
-            </div>
-
-            <div id="selection-preview" class="selection-preview" aria-live="polite">
-              <div class="selection-empty">还没有选择文件。</div>
-            </div>
-          </section>
-
-          <section id="ollama-fields" class="section-block tone-panel">
-            <div class="section-title-row">
-              <span class="section-label">本地分析参数</span>
-              <span class="section-note">仅在 Ollama 路线下显示</span>
-            </div>
-            <div class="inline-fields">
-              <label class="field">
-                <span>抽帧 FPS</span>
-                <input id="fps" name="fps" type="number" min="0.2" step="0.1" value="1">
-              </label>
-              <label class="field">
-                <span>最大帧数</span>
-                <input id="max_frames" name="max_frames" type="number" min="4" step="1" value="24">
-              </label>
-            </div>
-          </section>
-
-          <section id="gemini-fields" class="section-block tone-panel hidden">
-            <div class="section-title-row">
-              <span class="section-label">Gemini 凭据</span>
-              <span class="section-note">仅在 Gemini 路线下显示</span>
-            </div>
-            <div class="inline-fields gemini-grid">
-              <label class="field grow">
-                <span>Gemini API Key</span>
-                <input id="gemini_api_key" name="gemini_api_key" type="password" placeholder="AIza...">
-              </label>
-              <label class="field">
-                <span>Gemini 模型</span>
-                <input id="gemini_model" name="gemini_model" type="text" value="gemini-2.5-pro">
-              </label>
-            </div>
-          </section>
-
-          <section class="section-block">
-            <div class="section-title-row">
-              <span class="section-label">附加要求</span>
-              <span class="section-note">会作用到本次任务中的每个视频</span>
-            </div>
-            <label class="field">
-              <textarea
-                id="prompt"
-                name="prompt"
-                rows="6"
-                placeholder="例如：按时间顺序总结画面变化，点出人物动作、环境变化，以及你不确定的地方。"
-              ></textarea>
+        <!-- 素材上传 -->
+        <div class="control-group">
+          <label class="group-label">输入源 <span class="hint" id="selection-mode-note">单视频模式</span></label>
+          
+          <div id="single-drop" class="dropzone">
+            <label>
+              <input id="single-video-input" type="file" accept="video/*" hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+              <span>选择单个视频文件</span>
             </label>
-          </section>
-
-          <div class="action-row">
-            <button id="submit-button" class="primary" type="submit">开始分析</button>
-            <p id="submit-hint" class="action-hint">适合先用单视频试 prompt，再切到整文件夹批量跑。</p>
           </div>
-        </form>
 
-        <aside class="panel mission-panel">
-          <div class="panel-head">
-            <div>
-              <p class="panel-kicker">Mission Control</p>
-              <h2>处理状态</h2>
+          <div id="folder-drop" class="dropzone hidden">
+            <label>
+              <input id="folder-video-input" type="file" multiple webkitdirectory directory hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+              <span>选择整个文件夹</span>
+            </label>
+          </div>
+
+          <div id="selection-preview" class="selection-preview"></div>
+        </div>
+
+        <!-- 参数设置 (Ollama) -->
+        <div id="ollama-fields" class="control-group config-panel">
+          <label class="group-label">本地抽取参数</label>
+          <div class="grid-2">
+            <div class="input-wrap">
+              <label>抽帧 FPS</label>
+              <input id="fps" type="number" min="0.2" step="0.1" value="1">
             </div>
-            <p id="status-headline" class="panel-note">等待提交任务</p>
+            <div class="input-wrap">
+              <label>最大帧数</label>
+              <input id="max_frames" type="number" min="4" step="1" value="24">
+            </div>
           </div>
+        </div>
 
-          <div class="progress-shell">
+        <!-- 参数设置 (Gemini) -->
+        <div id="gemini-fields" class="control-group config-panel hidden">
+          <label class="group-label">Gemini 凭证</label>
+          <div class="input-wrap mb-2">
+            <label>API Key</label>
+            <input id="gemini_api_key" type="password" placeholder="AIza...">
+          </div>
+          <div class="input-wrap">
+            <label>Model</label>
+            <input id="gemini_model" type="text" value="gemini-2.5-pro">
+          </div>
+        </div>
+
+        <!-- 自定义 Prompt -->
+        <div class="control-group">
+          <label class="group-label">自定义指令 (Prompt)</label>
+          <textarea id="prompt" rows="4" placeholder="补充你的分析要求，例如：重点关注人物的异常举动..."></textarea>
+        </div>
+
+        <div class="actions">
+          <button id="submit-button" class="btn-primary" type="submit">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            <span id="submit-text">开始分析</span>
+          </button>
+        </div>
+      </form>
+    </aside>
+
+    <!-- 右侧主体内容 -->
+    <main class="main-content">
+      
+      <!-- 上半部分：任务总览与队列 -->
+      <section class="panel queue-section">
+        <header class="panel-header">
+          <div class="header-title">
+            <h2>任务监控台</h2>
+            <div id="meta-chips" class="chips-container"></div>
+          </div>
+          <div class="progress-container">
             <div id="progress-bar" class="progress-bar"></div>
           </div>
+        </header>
 
-          <div class="chips" id="meta-chips">
-            <span class="chip">未开始</span>
+        <div class="queue-layout">
+          <!-- 总体统计与日志 -->
+          <div class="overview-pane">
+            <div id="batch-summary" class="stats-grid"></div>
+            <div class="log-container">
+              <pre id="status-log">系统尚未开始处理。请在左侧配置任务并启动。</pre>
+            </div>
           </div>
 
-          <div class="mission-legend">
-            <span><i class="legend-dot legend-idle"></i>待处理</span>
-            <span><i class="legend-dot legend-live"></i>处理中</span>
-            <span><i class="legend-dot legend-done"></i>已完成</span>
-            <span><i class="legend-dot legend-fail"></i>失败</span>
+          <!-- 队列列表 -->
+          <div class="list-pane">
+            <h3 class="pane-title">执行队列 <span id="queue-subtitle"></span></h3>
+            <div id="item-list" class="queue-list">
+              <div class="empty-state">队列为空</div>
+            </div>
           </div>
-
-          <pre id="status-log" class="logbox">系统尚未开始处理。</pre>
-        </aside>
+        </div>
       </section>
 
-      <section class="results-grid">
-        <section class="panel queue-panel">
-          <div class="panel-head">
-            <div>
-              <p class="panel-kicker">Contact Sheet</p>
-              <h2>任务队列</h2>
-            </div>
-            <p id="queue-subtitle" class="panel-note">提交任务后，这里会按文件列出当前批次中的视频。</p>
+      <!-- 下半部分：单条详情 -->
+      <section class="panel detail-section">
+        <header class="panel-header detail-header">
+          <div>
+            <h2>详情结果</h2>
+            <p id="result-subtitle" class="subtitle">暂无选中内容</p>
           </div>
+          <button id="copy-current" class="btn-secondary" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            复制结果
+          </button>
+        </header>
 
-          <div id="batch-summary" class="summary-grid"></div>
-          <div id="item-list" class="item-list">
-            <div class="empty-state">提交任务后，这里会出现单视频或文件夹里的所有视频条目。</div>
+        <div class="detail-layout">
+          <div id="result-metrics" class="metrics-sidebar">
+            <!-- 动态填充的 Metric Card -->
           </div>
-        </section>
-
-        <section class="panel detail-panel">
-          <div class="panel-head panel-head-detail">
-            <div>
-              <p class="panel-kicker">Inspector</p>
-              <h2>结果详情</h2>
-            </div>
-            <div class="detail-actions">
-              <p id="result-subtitle" class="panel-note">暂无结果</p>
-              <button id="copy-current" class="ghost" type="button" disabled>复制当前结果</button>
-            </div>
+          <div class="analysis-content">
+            <article id="result-analysis" class="markdown-body empty">
+              选择左侧任务队列中的条目，以查看其多模态分析结果。
+            </article>
           </div>
-
-          <div id="result-metrics" class="metrics"></div>
-          <article id="result-analysis" class="analysis empty">
-            选择并运行任务后，这里会展示当前选中视频的分析结果。
-          </article>
-        </section>
+        </div>
       </section>
+
     </main>
+  </div>
 
-    <script src="/static/app.js" defer></script>
-  </body>
+  <script src="/static/app.js"></script>
+</body>
 </html>
